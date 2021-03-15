@@ -20,7 +20,9 @@ library(data.table)
   ## Ideally reinforcement learning through self-play would be used,
   ## and we can observe if it plays like a human, given our instantiation of an axiomatic human strategy.
 
+
 # 1 ------- INITIAL VIEW OF RASTER OBJECT
+
 ## We want to parameterize the model to be able to pick up on patterns in the pieces.
 ## ML on raster states throughout the game is the idea. 
 
@@ -33,7 +35,9 @@ board[] = 1:64
 plot(board)
 
 
+
 # 2 -------- MATRIX REPRESENTATIONS OF CHESS BOARD
+
 
 ## start with {a1, b1, ..., a8, b8, ..., g8, h8}
 ## must be careful about how we set up matrix notation
@@ -42,6 +46,7 @@ str(list(board_positions))
 
 ## Natural outer product orientation is not chess orientation
 board_positions
+
 
 ## Transpose + horizontal flip to get white position from outer product
 t(outer(letters[1:8], 8:1, FUN = paste0))
@@ -64,7 +69,6 @@ natural_matrix = matrix(outer(letters[1:8], 1:8, FUN = paste0), nrow = 8)
 natural_matrix
 natural_index = as.character(natural_matrix)
 natural_index
-
 
 ## Lets make an object to have tidy indices
 ind_table = data.table(pos = natural_index)
@@ -121,6 +125,7 @@ get_matrix <- function(indx) {
 }
 
 ## Ta-da!
+
 get_matrix(get_white("a1")) ## White's view of a1
 get_matrix(get_black("a1")) ## Black's view of a1
 get_matrix(get_white(chr_pos(5,4))) ## white's view of the 5th-file, 4th rank (e4)
@@ -193,6 +198,7 @@ names(indicator_grids) = piece_names
 ## Define each of our pieces as a one-hot grid
 str(indicator_grids)
 
+
 ## testing functionality
 tmp = raster(xmn = 0, xmx = 8, 
              ymn = 0, ymx = 8, 
@@ -201,6 +207,7 @@ values(tmp) = get_matrix(get_white("a2"))
 tmp
 plot(tmp)
 rm(tmp)
+
 
 ## Now build a list of rasters, one for each piece
 piece_rasters = list()
