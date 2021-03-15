@@ -20,6 +20,9 @@ library(data.table)
   ## Ideally reinforcement learning through self-play would be used,
   ## and we can observe if it plays like a human, given our instantiation of an axiomatic human strategy.
 
+
+# 1 ------- INITIAL VIEW OF RASTER OBJECT
+
 ## We want to parameterize the model to be able to pick up on patterns in the pieces.
 ## ML on raster states throughout the game is the idea. 
 
@@ -31,6 +34,11 @@ glimpse(board)
 board[] = 1:64
 plot(board)
 
+
+
+# 2 -------- MATRIX REPRESENTATIONS OF CHESS BOARD
+
+
 ## start with {a1, b1, ..., a8, b8, ..., g8, h8}
 ## must be careful about how we set up matrix notation
 board_positions = outer(letters[1:8], 1:8, FUN = paste0)
@@ -39,7 +47,8 @@ str(list(board_positions))
 ## Natural outer product orientation is not chess orientation
 board_positions
 
-## Transpose + horizontal flip to get chess orientation relative to file/rank
+
+## Transpose + horizontal flip to get white position from outer product
 t(outer(letters[1:8], 8:1, FUN = paste0))
 
 ## This is white's view of the board.
@@ -49,14 +58,17 @@ white_matrix =  t(outer(letters[1:8], 8:1, FUN = paste0))
 ## black's view of the board is a 180 degree rotation, just rev()
 black_matrix = matrix(rev(white_matrix), nrow = 8)
 
-## Natural index is normal matrix notation, small numbers/letters at the top left
-## Also natural with respect to R's default column-by-column matrix default
-## Increase indices as you go down/right
-## Since positions are referred to as "file-rank", then use that for "row-column" coordinates
+## Chess indexing differs from natural matrix indexing (low -> high directions)
+## With matrices, indexes increase as you go down/right
+## Since positions are referred to as "file-rank", 
+## use that to define a natural "row-column" coordinates
 ## I will align this with a 1-64 index based on default matrix() by-column ordering.
-## So we will list a1, b1, ..., f1, a2, b2,... and this order will be default processed by matrix correctly
+## Define other index conventions in terms of the natural matrix convention
+
 natural_matrix = matrix(outer(letters[1:8], 1:8, FUN = paste0), nrow = 8)
+natural_matrix
 natural_index = as.character(natural_matrix)
+natural_index
 
 ## Lets make an object to have tidy indices
 ind_table = data.table(pos = natural_index)
@@ -104,6 +116,7 @@ chr_pos <- function(file, rank) {
   return(paste0(letters[file], rank))
 }
 chr_pos(2,2)
+
 ## Position encoder - make a matrix with indicator at one index
 get_matrix <- function(indx) {
   tmp = matrix(rep(0,64), nrow = 8)
@@ -112,10 +125,11 @@ get_matrix <- function(indx) {
 }
 
 ## Ta-da!
-get_matrix(get_white("a1"))
-get_matrix(get_black("a1"))
-get_matrix(get_white(chr_pos(5,4)))
-get_matrix(get_natural("a5"))
+
+get_matrix(get_white("a1")) ## White's view of a1
+get_matrix(get_black("a1")) ## Black's view of a1
+get_matrix(get_white(chr_pos(5,4))) ## white's view of the 5th-file, 4th rank (e4)
+get_matrix(get_natural("a5")) ## a5 in natural index view
 
 ## Ok -- now what would a chess state look like?
 ## We are using this structure to represent each piece's possibilities in an easy-to-work-with way
@@ -143,31 +157,47 @@ n_pieces = c(8, 2, 2, 2, 1, 1)
 
 initial_state_white = list(id = 1:16,
   piece = unlist(sapply(1:6, function(i){c(rep(pieces[i],n_pieces[i]))})),
-  locs = c(get_rank(2), paste0(c("b","g", ## knight 1,2
-                                       "c", "f", ## bishop 1,2
-                                       "a", "h", ## rook 1,2
-                                       "d", # queen
-                                       "e"), # king
-                                     1)),
+  locs = c(get_rank(2), 
+           paste0(c("b","g", ## knight 1,2
+           "c", "f", ## bishop 1,2
+           "a", "h", ## rook 1,2
+           "d", # queen
+           "e"), # king
+           1)),
   white_turn = TRUE
 )
 
 initial_state_black = list(id = 1:16,
    piece = unlist(sapply(1:6, function(i){c(rep(pieces[i],n_pieces[i]))})),
-   locs = c(get_rank(7), paste0(c("b","g", ## knight 1,2
-                                        "c", "f", ## bishop 1,2
-                                        "a", "h", ## rook 1,2
-                                        "d", # queen
-                                        "e"), # king
-                                      9)),
+   locs = c(get_rank(7), 
+            paste0(c("b","g", ## knight 1,2
+                  "c", "f", ## bishop 1,2
+                  "a", "h", ## rook 1,2
+                  "d", # queen
+                  "e"), # king
+                   8)),
    white_turn = TRUE
    )
 
 initial_state_white
-
+initial_state_black
 
 ## Now finally we can construct a meaningful raster object
-indicator_grids = lapply(initial_state_white$locs, FUN = function(x) {get_matrix(get_white(x))})
+indicator_grids_white = lapply(initial_state_white$locs, FUN = function(x) {get_matrix(get_white(x))})
+indicator_grids_black = lapply(initial_state_black$locs, FUN = function(x) {get_matrix(get_black(x))})
+indicator_grids = c(indicator_grids_white,
+                    indicator_grids_black)
+
+piece_names = c(paste0(initial_state_white$piece,"_",initial_state_white$locs),
+                paste0(initial_state_black$piece,"_",initial_state_black$locs))
+
+names(indicator_grids) = piece_names
+
+
+
+## Define each of our pieces as a one-hot grid
+str(indicator_grids)
+
 
 ## testing functionality
 tmp = raster(xmn = 0, xmx = 8, 
@@ -178,41 +208,46 @@ tmp
 plot(tmp)
 rm(tmp)
 
-## now apply across all pieces in the starting position
-piece_grids = list()
-piece_names = paste0(initial_state_white$piece,"_",initial_state_white$locs)
 
-piece_grids = lapply(seq_along(piece_names), 
-       function(x) {
-         piece_grids[[piece_names[x]]] =
-          indicator_grids[[x]]})
-
+## Now build a list of rasters, one for each piece
 piece_rasters = list()
 
 ## Testing matrix input default parsing
-piece_grids[[1]] ## Pawn on a2
-tmp = raster(piece_grids[[1]])
-tmp@data@values
+indicator_grids[[1]] ## Pawn on a2
 
-## When retrieving values from raster, MUST coerce to matrix with byrow
-## I was using by column in my earlier derivation of indices..
-tmp@data@values
-as.vector(matrix(tmp@data@values, nrow = tmp@nrows, byrow = TRUE))
+tmp = raster(nrows = 8,
+             ncols = 8,
+             xmn = 0, 
+             xmx = 8,
+             ymn = 0, 
+             ymx = 8,
+             vals = as.vector(indicator_grids[[1]]))
 
-## Conversely, just transpose. However, it would be nice to have everything on the same basis.
-t(matrix(tmp@data@values, nrow = tmp@nrows))
+identical(as.vector(indicator_grids[[1]]),
+                    tmp@data@values)
 
-## Alternatively, when we create raster objects, we can just feed it the transpose
-## Then, when we reference data in the rasters, it will match our index expectations.
-## I like this method better actually.
-tmp = raster(t(piece_grids[[1]]))
-matrix(tmp@data@values, nrow = tmp@nrows)
-
+## Orientation is preserved in row/column-wise flattening
+matrix(tmp@data@values, ncol = 8)
 
 ## Now construct the rasters for each piece
-lapply(seq_along(piece_names),
+piece_rasters = lapply(seq_along(piece_names),
        function(x) {
          piece_rasters[[piece_names[x]]] =
-           raster(piece_grids[[x]])
-       })      
+           raster(nrows = 8,
+                  ncols = 8,
+                  xmn = 0,
+                  xmx = 8,
+                  ymn = 0,
+                  ymx = 8,
+                  vals = as.vector(indicator_grids[[x]]))
+        })      
+names(piece_rasters) = piece_names
 
+## Pawn on b2
+matrix(piece_rasters[[grep("._b2", names(piece_rasters), value = TRUE)]]@data@values,
+       nrow = 8)
+
+## Okay! Now we have white's position represented as a list of rasters. 
+## The raster package has a natural virtual class extension called a rasterBrick
+initial_state = brick(piece_rasters)
+str(initial_state)
